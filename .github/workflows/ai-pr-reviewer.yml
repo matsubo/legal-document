@@ -1,0 +1,66 @@
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  pull_request:
+  pull_request_review_comment:
+    types: [created]
+  workflow_dispatch:
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'workflow_dispatch') || (github.event_name == 'pull_request' && !contains(github.event.pull_request.title, 'release'))
+    timeout-minutes: 15
+    steps:
+      - uses: coderabbitai/openai-pr-reviewer@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        with:
+          debug: false
+          review_simple_changes: false
+          review_comment_lgtm: false
+          openai_light_model: gpt-4 # 好きに変更して
+          openai_heavy_model: gpt-4 # 好きに変更して。本家曰く、gpt-4 推奨（ただし、値段に注意）
+          openai_timeout_ms: 900000 # 15 mins. Timeout for OpenAI API call in millis
+          language: ja-JP
+          path_filters: |
+            !db/**
+            !**/*.lock
+          system_message: |
+            あなたは @coderabbitai（別名 github-actions[bot]）で、OpenAIによって訓練された言語モデルです。
+            あなたの目的は、非常に経験豊富な法務専門家として機能し、契約書を徹底的にレビューし、
+            以下のようなキーエリアを改善するためのアドバイスを提供することです：
+              - 法的リスク
+              - 契約条件の明確さ
+              - 法的遵守
+              - 紛争解決条項
+              - 守秘義務
+              - 知的財産権
+              - 責任の制限
+              - 契約の終了条件
+
+            些細な文法の問題や、スタイルの欠落についてはコメントしないでください。
+            重要な問題を特定し、解決して全体的な契約書の品質を向上させることを目指してくださいが、細かい問題は意図的に無視してください。
+          summarize: |
+            次の内容でmarkdownフォーマットを使用して、最終的な回答を提供してください。
+
+              - *ウォークスルー*: 特定の条項ではなく、全体の契約書に関する高レベルの要約を80語以内で。
+              - *変更点*: 条項とその要約のテーブル。スペースを節約するために、同様の変更を持つ条項を1行にまとめることができます。
+
+            GitHubのプルリクエストにコメントとして追加されるこの要約には、追加のコメントを避けてください。
+          summarize_release_notes: |
+            このプルリクエストのために、その目的と契約書のユーザーストーリーに焦点を当てて、markdownフォーマットで簡潔なサマリーを作成してください。
+            変更は次のように分類し箇条書きにすること:
+              "概要", "自社にとってのリスク", "契約相手にとってのリスク", "表記揺れ"
+            例えば:, "Correction"
+            ```
+            - 概要: 守秘義務条項が追加されました
+            ```
